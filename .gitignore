@@ -22,13 +22,13 @@ FROM Reviews
 WHERE result != 3
 """, df)
 
-def partition(x):
+def split(x):
     if x < 3:
         return 'negative'
     return 'positive'
 
 result = messages['result']
-result = result.map(partition)
+result = result.map(split)
 comment = messages['comment']
 X_train, X_test, y_train, y_test = train_test_split(comment, result, test_size=0.3, random_state=1)
 
@@ -40,7 +40,7 @@ def replace_non_alphanumerics(source):
     result = re.sub("[^_a-zA-Z0-9]", ' ', source)
     return result
     
-def stem_tokens(tokens, stemmer):
+def token_stem(tokens, stemmer):
     stemmed = []
     for item in tokens:
         stemmed.append(stemmer.stem(item))
@@ -49,7 +49,7 @@ def stem_tokens(tokens, stemmer):
 def tokenize(text):
     tokens = nltk.word_tokenize(text)
     #tokens = [word for word in tokens if word not in stopwords.words('english')]
-    stems = stem_tokens(tokens, stemmer)
+    stems = token_stem (tokens, stemmer)
     return ' '.join(stems)
 
 
@@ -65,11 +65,11 @@ def tokenize(text):
 ##--- Training set
 
 corpus = []
-for text in X_train:
-    text = text.lower()
-    text = replace_non_alphanumerics(text)
-    text=tokenize(text)
-    corpus.append(text)
+for w in X_train:
+    w = w.lower()
+    w = replace_non_alphanumerics(w)
+    w=tokenize(w)
+    corpus.append(w)
         
 count_vect = CountVectorizer()
 X_train_counts = count_vect.fit_transform(corpus)        
@@ -80,11 +80,11 @@ X_train_tfidf = tfidf_transformer.fit_transform(X_train_counts)
 #--- Test set
 
 test_set = []
-for text in X_test:
-    text = text.lower()
-    text = replace_non_alphanumerics(text)
-    text=tokenize(text)
-    test_set.append(text)
+for w in X_test:
+    w = text.lower()
+    w = replace_non_alphanumerics(w)
+    w=tokenize(w)
+    w_set.append(w)
 
 X_new_counts = count_vect.transform(test_set)
 X_test_tfidf = tfidf_transformer.transform(X_new_counts)
