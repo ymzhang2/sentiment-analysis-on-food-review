@@ -15,12 +15,12 @@ import numpy as np
 
 
 
-con = sqlite3.connect('/Users/yimanzhang/Desktop/dataset/database.sqlite')
+df = sqlite3.connect('/Users/yimanzhang/Desktop/dataset/database.sqlite')
 messages = pd.read_sql_query("""
 SELECT result, comment
 FROM Reviews
 WHERE result != 3
-""", con)
+""", df)
 
 def partition(x):
     if x < 3:
