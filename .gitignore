@@ -1,4 +1,4 @@
-####Click https://www.kaggle.com/snap/amazon-fine-food-reviews to download the dataset 
+
 # coding: utf-8
 
 # In[1]:
@@ -13,19 +13,13 @@ import string
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sklearn.feature_extraction.text import TfidfTransformer
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.cross_validation import train_test_split
-from sklearn.metrics import confusion_matrix
-from sklearn import metrics
-from sklearn.metrics import roc_curve, auc
-from nltk.stem.porter import PorterStemmer
 
-con = sqlite3.connect('/Users/yimanzhang/Desktop/kaggle/amazon-fine-foods-2/database.sqlite')
+
+con = sqlite3.connect('/Users/yimanzhang/Desktop/dataset/database.sqlite')
 messages = pd.read_sql_query("""
-SELECT Score, Summary
+SELECT result, comment
 FROM Reviews
-WHERE Score != 3
+WHERE result != 3
 """, con)
 
 def partition(x):
@@ -33,14 +27,19 @@ def partition(x):
         return 'negative'
     return 'positive'
 
-Score = messages['Score']
-Score = Score.map(partition)
-Summary = messages['Summary']
-X_train, X_test, y_train, y_test = train_test_split(Summary, Score, test_size=0.2, random_state=42)
+result = messages['result']
+result = result.map(partition)
+comment = messages['comment']
+X_train, X_test, y_train, y_test = train_test_split(comment, result, test_size=0.3, random_state=1)
 
 stemmer = PorterStemmer()
-from nltk.corpus import stopwords
 
+import re
+
+def replace_non_alphanumerics(source):
+    result = re.sub("[^_a-zA-Z0-9]", ' ', source)
+    return result
+    
 def stem_tokens(tokens, stemmer):
     stemmed = []
     for item in tokens:
@@ -53,11 +52,6 @@ def tokenize(text):
     stems = stem_tokens(tokens, stemmer)
     return ' '.join(stems)
 
-import re
-
-def replace_non_alphanumerics(source):
-    result = re.sub("[^_a-zA-Z0-9]", ' ', source)
-    return result
 
 ## countVectorizer: Text preprocessing, tokenizing and filtering of stopwords are included in a high level component 
 ## that is able to build a dictionary of features and transform documents to feature vectors:
@@ -95,73 +89,6 @@ for text in X_test:
 X_new_counts = count_vect.transform(test_set)
 X_test_tfidf = tfidf_transformer.transform(X_new_counts)
 
-from pandas import *
-df = DataFrame({'Before': X_train, 'After': corpus})
-print(df.head(20))
 
 
-# In[2]:
 
-prediction = dict()
-### Multinomial Naive Bayes learning method
-from sklearn.naive_bayes import MultinomialNB
-model = MultinomialNB().fit(X_train_tfidf, y_train)
-prediction['Multinomial'] = model.predict(X_test_tfidf)
-
-
-# In[3]:
-
-### Bernouli Naive Bayes learning method
-from sklearn.naive_bayes import BernoulliNB
-model = BernoulliNB().fit(X_train_tfidf, y_train)
-prediction['Bernoulli'] = model.predict(X_test_tfidf)
-
-
-# In[4]:
-
-### logistic regression learning method
-from sklearn import linear_model
-logreg = linear_model.LogisticRegression(C=1e5)
-logreg.fit(X_train_tfidf, y_train)
-prediction['Logistic'] = logreg.predict(X_test_tfidf)
-
-
-# In[5]:
-
-def formatt(x):
-    if x == 'negative':
-        return 0
-    return 1
-vfunc = np.vectorize(formatt)
-
-#%d is the format code for an integer.  %f is the format code for a float.
-#%s prints the str() of an object (What you see when you print(object)).
-#%r prints the repr() of an object (What you see when you print(repr(object))
-
-cmp = 0
-colors = ['b', 'g', 'y', 'm', 'k']
-for model, predicted in prediction.items():
-    false_positive_rate, true_positive_rate, thresholds = roc_curve(y_test.map(formatt), vfunc(predicted))
-    roc_auc = auc(false_positive_rate, true_positive_rate)
-    plt.plot(false_positive_rate, true_positive_rate, colors[cmp], label='%s: AUC %0.2f'% (model,roc_auc))
-    cmp += 1
-
-plt.title('Classifiers comparaison with ROC')
-plt.legend(loc='lower right')
-plt.plot([0,1],[0,1],'r--')
-plt.xlim([-0.1,1.2])
-plt.ylim([-0.1,1.2])
-plt.ylabel('True Positive Rate')
-plt.xlabel('False Positive Rate')
-plt.show()
-
-
-# In[6]:
-
-#After plotting the ROC curve, it would appear that the Logistic regression method provides us with the best results, although the AUC value for this method is not outstanding...
-#Let's focus on logistic regression, and vizualise the accuracy, recall and confusion matrix of this model:
-
-print(metrics.classification_report(y_test, prediction['Logistic'], target_names = ["positive", "negative"]))
-
-
-# In[ ]:
