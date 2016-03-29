@@ -30,6 +30,8 @@ def split(x):
 result = messages['result']
 result = result.map(split)
 comment = messages['comment']
+
+from sklearn.cross_validation import train_test_split
 X_train, X_test, y_train, y_test = train_test_split(comment, result, test_size=0.3, random_state=1)
 
 stemmer = PorterStemmer()
@@ -63,6 +65,8 @@ def tokenize(text):
 ## This is done through using the fit_transform(..) method as shown below, and as mentioned in the note in the previous section:
 
 ##--- Training set
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.feature_extraction.text import CountVectorizer
 
 corpus = []
 for w in X_train:
