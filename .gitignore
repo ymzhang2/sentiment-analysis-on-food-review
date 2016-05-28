@@ -1,9 +1,8 @@
-
 # coding: utf-8
 
 # In[1]:
 
-get_ipython().magic(u'matplotlib inline')
+get_ipython().magic('matplotlib inline')
 
 import sqlite3
 import pandas as pd
@@ -13,36 +12,35 @@ import string
 import matplotlib.pyplot as plt
 import numpy as np
 
-
-
-df = sqlite3.connect('/Users/yimanzhang/Desktop/dataset/database.sqlite')
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.cross_validation import train_test_split
+from sklearn.metrics import confusion_matrix
+from sklearn import metrics
+from sklearn.metrics import roc_curve, auc
+from nltk.stem.porter import PorterStemmer
+from nltk.stem.porter import PorterStemmer
+con = sqlite3.connect('/Users/yimanzhang/Desktop/kaggle/amazon-fine-foods-2/database.sqlite')
 messages = pd.read_sql_query("""
-SELECT result, comment
+SELECT Score, Summary
 FROM Reviews
-WHERE result != 3
-""", df)
+WHERE Score != 3
+""", con)
 
-def split(x):
+def partition(x):
     if x < 3:
         return 'negative'
     return 'positive'
 
-result = messages['result']
-result = result.map(split)
-comment = messages['comment']
-
-from sklearn.cross_validation import train_test_split
-X_train, X_test, y_train, y_test = train_test_split(comment, result, test_size=0.3, random_state=1)
+Score = messages['Score']
+Score = Score.map(partition)
+Summary = messages['Summary']
+X_train, X_test, y_train, y_test = train_test_split(Summary, Score, test_size=0.2, random_state=42)
 
 stemmer = PorterStemmer()
 
-import re
 
-def replace_non_alphanumerics(source):
-    result = re.sub("[^_a-zA-Z0-9]", ' ', source)
-    return result
-    
-def token_stem(tokens, stemmer):
+def stem_tokens(tokens, stemmer):
     stemmed = []
     for item in tokens:
         stemmed.append(stemmer.stem(item))
@@ -50,10 +48,14 @@ def token_stem(tokens, stemmer):
 
 def tokenize(text):
     tokens = nltk.word_tokenize(text)
-    #tokens = [word for word in tokens if word not in stopwords.words('english')]
-    stems = token_stem (tokens, stemmer)
+    stems = stem_tokens(tokens, stemmer)
     return ' '.join(stems)
 
+import re
+
+def replace_non_alphanumerics(source):
+    result = re.sub("[^_a-zA-Z0-9]", ' ', source)
+    return result
 
 ## countVectorizer: Text preprocessing, tokenizing and filtering of stopwords are included in a high level component 
 ## that is able to build a dictionary of features and transform documents to feature vectors:
@@ -65,18 +67,16 @@ def tokenize(text):
 ## This is done through using the fit_transform(..) method as shown below, and as mentioned in the note in the previous section:
 
 ##--- Training set
-from sklearn.feature_extraction.text import TfidfTransformer
-from sklearn.feature_extraction.text import CountVectorizer
 
 corpus = []
-for w in X_train:
-    w = w.lower()
-    w = replace_non_alphanumerics(w)
-    w=tokenize(w)
-    corpus.append(w)
+for text in X_train:
+    text = text.lower()
+    text = replace_non_alphanumerics(text)
+    text=tokenize(text)
+    corpus.append(text)
         
-count_vect = CountVectorizer()
-X_train_counts = count_vect.fit_transform(corpus)        
+vectorizer = CountVectorizer()
+X_train_counts = vectorizer.fit_transform(corpus)        
         
 tfidf_transformer = TfidfTransformer()
 X_train_tfidf = tfidf_transformer.fit_transform(X_train_counts)
@@ -84,14 +84,153 @@ X_train_tfidf = tfidf_transformer.fit_transform(X_train_counts)
 #--- Test set
 
 test_set = []
-for w in X_test:
-    w = text.lower()
-    w = replace_non_alphanumerics(w)
-    w=tokenize(w)
-    w_set.append(w)
+for text in X_test:
+    text = text.lower()
+    text = replace_non_alphanumerics(text)
+    text=tokenize(text)
+    test_set.append(text)
 
-X_new_counts = count_vect.transform(test_set)
+X_new_counts = vectorizer.transform(test_set)
 X_test_tfidf = tfidf_transformer.transform(X_new_counts)
+
+from pandas import *
+df = DataFrame({'Before': X_train, 'After': corpus})
+print(df.head(20))
+
+
+# In[2]:
+
+prediction = dict()
+### Multinomial Naive Bayes learning method
+from sklearn.naive_bayes import MultinomialNB
+model = MultinomialNB().fit(X_train_tfidf, y_train)
+prediction['Multinomial'] = model.predict(X_test_tfidf)
+
+
+# In[3]:
+
+### Bernouli Naive Bayes learning method
+from sklearn.naive_bayes import BernoulliNB
+model = BernoulliNB().fit(X_train_tfidf, y_train)
+prediction['Bernoulli'] = model.predict(X_test_tfidf)
+
+
+# In[4]:
+
+### logistic regression learning method
+from sklearn import linear_model
+logreg = linear_model.LogisticRegression(C=1e5)
+logreg.fit(X_train_tfidf, y_train)
+prediction['Logistic'] = logreg.predict(X_test_tfidf)
+
+
+# In[5]:
+
+### Stochastic Gradient Descent
+sgd = linear_model.SGDClassifier(penalty='l1')
+sgd.fit(X_train_tfidf,y_train)
+prediction['SGD'] = logreg.predict(X_test_tfidf)
+
+
+# In[14]:
+
+### Random Forest
+from sklearn import ensemble
+rf=ensemble.RandomForestClassifier(n_estimators=10)
+rf.fit(X_train_tfidf,y_train)
+prediction['RandomForest'] = rf.predict(X_test_tfidf)
+
+
+# In[15]:
+
+prediction
+
+
+# In[16]:
+
+### AUC curve
+def formatt(x):
+    if x == 'negative':
+        return 0
+    return 1
+vfunc = np.vectorize(formatt)
+
+#%d is the format code for an integer.  %f is the format code for a float.
+#%s prints the str() of an object (What you see when you print(object)).
+#%r prints the repr() of an object (What you see when you print(repr(object))
+
+cmp = 0
+colors = ['b', 'g', 'y', 'm', 'k']
+for model, predicted in prediction.items():
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(vfunc(y_test), vfunc(predicted))
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    plt.plot(false_positive_rate, true_positive_rate, colors[cmp], label='%s: AUC %0.2f'% (model,roc_auc))
+    cmp += 1
+
+plt.title('Classifiers comparaison with ROC')
+plt.legend(loc='lower right')
+plt.plot([0,1],[0,1],'r--')
+plt.xlim([-0.1,1.2])
+plt.ylim([-0.1,1.2])
+plt.ylabel('True Positive Rate')
+plt.xlabel('False Positive Rate')
+plt.show()
+
+
+# In[14]:
+
+#After plotting the ROC curve, it would appear that the Logistic regression method provides us with the best results, although the AUC value for this method is not outstanding...
+#Let's focus on logistic regression, and vizualise the accuracy, recall and confusion matrix of this model:
+
+print(metrics.classification_report(y_test, prediction['Logistic'], target_names = ["positive", "negative"]))
+
+
+# In[17]:
+
+print(metrics.classification_report(y_test, prediction['RandomForest'], target_names = ["positive", "negative"]))
+
+
+# In[19]:
+
+### confusion matrix plot
+get_ipython().magic('matplotlib inline')
+import warnings 
+warnings.filterwarnings("ignore")
+
+def plot_confusion_matrix(cm, title='Confusion matrix', cmap=plt.cm.Blues):
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(set(Score)))
+    plt.xticks(tick_marks, set(Score), rotation=45)
+    plt.yticks(tick_marks, set(Score))
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+
+# Compute confusion matrix
+cm = confusion_matrix(y_test, prediction['RandomForest'])
+np.set_printoptions(precision=2)
+print('Confusion matrix, without normalization')
+print(cm)
+plt.figure()
+plot_confusion_matrix(cm)
+
+# Normalize the confusion matrix by row (i.e by the number of samples
+# in each class)
+cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+print('Normalized confusion matrix')
+print(cm_normalized)
+plt.figure()
+plot_confusion_matrix(cm_normalized, title='Normalized confusion matrix')
+
+
+
+
+
+
+
 
 
 
